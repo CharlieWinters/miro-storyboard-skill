@@ -30,8 +30,10 @@ import sys
 import bpy
 from mathutils import Vector
 
-# retarget.py sits beside this script; Blender's -P doesn't put it on the path.
+# retarget.py sits beside this script, the Action Pad modules in action_pad/;
+# Blender's -P doesn't put either on the path.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "action_pad"))
 
 # Aspect strings the storyboard skill uses, as width/height multipliers.
 ASPECTS = {
@@ -280,6 +282,25 @@ def add_rigged(name, spec, spec_dir, cache_dir, ctx):
     root = bpy.data.objects.new(name, None)
     scene.collection.objects.link(root)
     arm.parent = root
+
+    if spec.get("puppet"):
+        # Puppet mode (Action Pad): no baked performance. Build the clip
+        # library and the NLA stack; takes are recorded later, live from a
+        # gamepad or from a scripted take.
+        import library
+        import puppet
+
+        s = float(spec.get("scale") or 1.0)
+        root.scale = (s, s, s)
+        root.location = spec.get("loc") or [0, 0, 0]
+        root.rotation_euler = rotation_of(spec)
+        table = library.build_library(arm, spec["puppet"],
+                                      lambda pth: resolve_asset(pth, spec_dir, cache_dir))
+        puppet.setup_puppet(root, arm, scene)
+        ctx.setdefault("puppets", {})[name] = {
+            k: {kk: v[kk] for kk in ("kind", "duration", "speed", "distance", "mapped_bones") if kk in v}
+            for k, v in table.items()}
+        return root
 
     # The FBX importer rewrites the scene's fps and frame range to the clip's.
     keep = (scene.render.fps, scene.frame_start, scene.frame_end)
@@ -589,34 +610,27 @@ def animate_subjects(scene, movers, frames):
         (linear if motion == "linear" else ease)(obj)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--spec", required=True, help="shot spec JSON path")
-    ap.add_argument("--out", required=True, help="output directory")
-    ap.add_argument("--still-only", action="store_true", help="skip the mp4")
-    args = ap.parse_args(argv_after_ddash())
+def build_scene(spec, spec_dir, out_dir):
+    """Everything up to rendering: set, subjects, camera, sun, animation.
 
-    with open(args.spec) as f:
-        spec = json.load(f)
-
-    name = spec.get("name") or "SHOT"
-    aspect = spec.get("aspect") or "16:9"
-    width = spec.get("width") or 960
+    Split out of main() so the Action Pad add-on can rebuild a shot inside a
+    live Blender session and render it with render_outputs().
+    """
     fps = int(spec.get("fps") or 24)
     duration = float(spec.get("duration") or 2.5)
     frames = max(2, int(round(fps * duration)))
 
-    os.makedirs(args.out, exist_ok=True)
+    os.makedirs(out_dir, exist_ok=True)
     wipe_scene()
     scene = bpy.context.scene
     scene.render.fps = fps
-    shading = setup_render(scene, aspect, width, spec.get("clay_color"), spec.get("sky_color"))
+    shading = setup_render(scene, spec.get("aspect") or "16:9", spec.get("width") or 960,
+                           spec.get("clay_color"), spec.get("sky_color"))
 
     if spec.get("ground", True):
         add_ground(float(spec.get("ground_size") or 60))
 
-    spec_dir = os.path.dirname(os.path.abspath(args.spec))
-    cache_dir = os.path.join(args.out, "_assets")
+    cache_dir = os.path.join(out_dir, "_assets")
     ctx = {"frames": frames, "fps": fps}
     movers = []
     for subject in expand_repeats(spec.get("subjects") or []):
@@ -634,23 +648,28 @@ def main():
 
     animate_camera(scene, cam, look_at, spec, frames)
     animate_subjects(scene, movers, frames)
+    scene["shot_name"] = spec.get("name") or "SHOT"
+    return scene, ctx
 
+
+def render_outputs(scene, name, out_dir, still_only=False):
+    """Render <name>_block.png (frame 1) and <name>_move.mp4 (the whole range)."""
+    fps = scene.render.fps
     out = {"name": name}
-    if ctx.get("retargets"):
-        out["retargets"] = ctx["retargets"]
 
     # --- still: frame 1, the composition reference -----------------------
-    still = os.path.join(args.out, f"{name}_block.png")
-    scene.frame_set(1)
+    still = os.path.join(out_dir, f"{name}_block.png")
+    scene.frame_set(scene.frame_start)
     scene.render.image_settings.file_format = "PNG"
     scene.render.filepath = still
     bpy.ops.render.render(write_still=True)
     out["still"] = still
 
     # --- clip: the motion reference --------------------------------------
-    if not args.still_only:
-        clip = os.path.join(args.out, f"{name}_move.mp4")
-        frames_dir = os.path.join(args.out, f"{name}_frames")
+    if not still_only:
+        clip = os.path.join(out_dir, f"{name}_move.mp4")
+        frames_dir = os.path.join(out_dir, f"{name}_frames")
+        shutil.rmtree(frames_dir, ignore_errors=True)
         os.makedirs(frames_dir, exist_ok=True)
         scene.render.image_settings.file_format = "PNG"
         scene.render.filepath = os.path.join(frames_dir, "f_")
@@ -665,14 +684,37 @@ def main():
         else:
             shutil.rmtree(frames_dir, ignore_errors=True)
             out["clip"] = clip
-            out["frames"] = frames
+            out["frames"] = scene.frame_end - scene.frame_start + 1
             out["fps"] = fps
+    out["resolution"] = [scene.render.resolution_x, scene.render.resolution_y]
+    return out
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--spec", required=True, help="shot spec JSON path")
+    ap.add_argument("--out", required=True, help="output directory")
+    ap.add_argument("--still-only", action="store_true", help="skip the mp4")
+    ap.add_argument("--setup-only", action="store_true",
+                    help="build the scene and save the .blend without rendering (for Action Pad)")
+    args = ap.parse_args(argv_after_ddash())
+
+    with open(args.spec) as f:
+        spec = json.load(f)
+    name = spec.get("name") or "SHOT"
+    scene, ctx = build_scene(spec, os.path.dirname(os.path.abspath(args.spec)), args.out)
+
+    out = {"name": name}
+    if not args.setup_only:
+        out = render_outputs(scene, name, args.out, args.still_only)
+    if ctx.get("retargets"):
+        out["retargets"] = ctx["retargets"]
+    if ctx.get("puppets"):
+        out["puppets"] = ctx["puppets"]
 
     blend = os.path.join(args.out, f"{name}.blend")
     bpy.ops.wm.save_as_mainfile(filepath=blend)
     out["blend"] = blend
-    out["resolution"] = [scene.render.resolution_x, scene.render.resolution_y]
-
     print("SHOT_RESULT " + json.dumps(out))
 
 

@@ -25,3 +25,26 @@ ANIM = {
 def rigged(name, anim, loc, rot_z=0, **kw):
     s = {"name": name, "type": "rigged", "path": RIG[name], "anim": ANIM[anim], "loc": loc, "rot_z": rot_z}
     s.update(kw); return s
+
+ANIM.update({
+ "IDLE": "https://v3b.fal.media/files/b/0aac3e51/P9Oegl1befztDmZ8TL8h5_hy_motion_000.fbx",      # stands, breathing, weight shift
+ "WAVE": "https://v3b.fal.media/files/b/0aac3e53/GX7t5zdZbXnqaaWhYyUpd_hy_motion_000.fbx",      # waves hello, right hand
+ "LOOK_BACK": "https://v3b.fal.media/files/b/0aac3e54/tKPFS6XepWaOa-dOoDlJx_hy_motion_000.fbx", # looks back over right shoulder
+})
+# Meshy Rigging's own locomotion cycles, already on each character's skeleton.
+CYCLES = {
+ "CHAR_A": {"walk": "https://v3b.fal.media/files/b/0aac3ca3/kXPdOPfiLAS4zFbCfCJcu_walking_armature.glb",
+            "run": "https://v3b.fal.media/files/b/0aac3ca3/0abmlzpGtjAWXFP2hzX9x_running_armature.glb"},
+ "CHAR_B": {"walk": "https://v3b.fal.media/files/b/0aac3ca4/9NXtlna9u89ehVJAirei__walking_armature.glb",
+            "run": "https://v3b.fal.media/files/b/0aac3ca4/3ojhxwXA8WhJTRa-JHURI_running_armature.glb"},
+}
+def puppet(name, loc, rot_z=0):
+    """A rigged character set up for Action Pad instead of a baked clip."""
+    return {"name": name, "type": "rigged", "path": RIG[name], "loc": loc, "rot_z": rot_z,
+            "puppet": {"walk": CYCLES[name]["walk"], "run": CYCLES[name]["run"],
+                       "idle": {"anim": ANIM["IDLE"], "in": 0, "out": 6},
+                       "clips": {"react_left": {"anim": ANIM["A_REACT"], "in": 1.0, "out": 5.0},
+                                 "flinch": {"anim": ANIM["B_REACT"], "in": 1.6, "out": 6.0},
+                                 "wave": {"anim": ANIM["WAVE"], "in": 0, "out": 4},
+                                 "look_back": {"anim": ANIM["LOOK_BACK"], "in": 0, "out": 4}},
+                       "buttons": {"a": "react_left", "b": "flinch", "x": "wave", "y": "look_back"}}}

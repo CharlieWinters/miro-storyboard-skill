@@ -13,6 +13,7 @@ Spec generators behind the *Night Walk · Blender greybox demo* board
 - `s3.py`: Shot 3, the car passes and the camera whip-pans to follow it. `S3.json` is its output.
 - `s2.py`: Shot 2, a tracking two-shot with both characters rigged and walking (Hunyuan Motion). `S2.json` is its output.
 - `s4.py`: Shot 4, the reaction close-up: both stop, she turns to follow the passing car, he flinches a beat later. `S4.json` is its output.
+- `s_puppet.py`: the Action Pad stage, both characters as gamepad puppets (see `scripts/action_pad/README.md`). `demo_takes.json` is a scripted two-pass take for it.
 - `previews.py`: one grey turntable-style still per GLB for the reference library.
 
 ```bash

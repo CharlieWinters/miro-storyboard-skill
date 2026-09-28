@@ -114,6 +114,10 @@ driving away. Sweeping `look_at` through the camera's own position instead
 flips the view. Extend the set **behind** the camera and close that end too,
 or the whip lands on open sky.
 
+**Want to perform it yourself?** Give a rigged subject a `"puppet"` block
+instead of `anim`, build with `--setup-only`, and drive it live with a gamepad
+in Blender: `scripts/action_pad/README.md`.
+
 ## Performing characters: `type: "rigged"` (Meshy Rigging + Hunyuan Motion)
 
 A GLB is a statue. For a shot whose point is a performance (a walk-and-talk, a
