@@ -55,12 +55,64 @@ to skip the clip.
 }
 ```
 
-- `type`: `cube` · `cylinder` · `sphere` · `cone` · `plane` · `wall` · `human`
-- `loc` is a primitive's **centre** but a figure's **feet**
+- `type`: `cube` · `cylinder` · `sphere` · `cone` · `plane` · `wall` · `human` · `glb`
+- `loc` is a primitive's **centre** but a figure's (and a GLB's) **feet**
 - `rot_x` / `rot_y` / `rot_z` in degrees — reach for pitch before faking an
   angle with extra geometry
 - `loc_end` moves a subject over the clip; `camera_end` moves the camera
 - omit `camera_end` for a locked-off shot
+
+## Real meshes instead of clay: `type: "glb"`
+
+When the mannequin is too crude (it has no facing, no silhouette, no
+costume), generate the characters and props as meshes and block with those.
+Verified 2026-09-28 on the *Night Walk* demo board (`uXjVHh8qBX0=`).
+
+```json
+{ "name": "CHAR_A", "type": "glb", "path": "https://v3b.fal.media/…/model.glb",
+  "loc": [4.3, 24, 0.14], "loc_end": [4.3, 20.5, 0.14], "rot_z": 0,
+  "height": 1.68, "decimate": 0.25 }
+```
+
+- `path`: a local file (relative to the spec) or an http(s) URL, cached in
+  `<out>/_assets` so a re-render doesn't re-download.
+- `height` (m, bounds z) or `length` (m, longest horizontal side) sets a
+  uniform scale; `scale` multiplies on top.
+- The mesh is recentred so `loc` is the **bottom-centre** of its bounds: feet
+  for a person, tyres on the road for a car.
+- Facing: a glTF front (+Z) imports facing **-Y**, i.e. toward a camera at
+  negative y. `rot_z` turns it from there.
+- `decimate` (0–1) thins image-to-3D output (≈500k faces) so the `.blend`
+  stays small. 0.25 still reads fine in a wide.
+- Materials are ignored. Workbench draws everything in clay, so a textured
+  GLB costs money for nothing: generate **geometry only**.
+- A GLB is rigid. `loc_end` slides it, so a walking figure glides in its
+  A-pose. That's fine for position and scale; don't promise a gait.
+
+**Which image-to-3D model** (live prices, 2026-09-28): Hunyuan 3D v3.1 Pro
+(`fal-ai/hunyuan-3d/v3.1/pro/image-to-3d`) is the one that takes a
+turnaround: front + back + left + right (+ ¾) view slots and a
+`generate_type: "Geometry"` mode. $0.375, +$0.15 for multi-view, +$0.15 for a
+custom face count. Crop each view out of the sheet onto a padded square and
+map them by what the view *shows*: a figure facing screen-right shows its
+**right** side. Tripo H3.1 ($0.20 untextured) and Trellis 2 ($0.30 at 1024) are
+single-image only. Of four turnaround sheets, only the car's had a bad view
+(the "right profile" was a mirrored left), so check every crop before
+uploading it.
+
+The Fal app has no multi-view card format: an image-to-3D recipe card saves
+`referenceField: null` and the director assigns each view to its slot in the
+panel. Wire the sheet and the view crops to the card so they're at hand.
+
+`repeat: {"count": 8, "offset": [0, 15, 0]}` on any subject lays out copies
+along a line (`NAME_1`, `NAME_2`, …). Use it for lamp posts, bollards and
+parked cars.
+
+**A street that reads in grey:** a road slab, raised kerbs (0.16 m) and
+pavements both sides, building blocks of varying height and depth with a
+cornice ledge for horizontal lines, lamp posts every 15 m on both kerbs, and a
+building across the far end so the vanishing point terminates instead of
+opening onto sky.
 
 **Greybox fails on open terrain, and no amount of iterating fixes it.**
 Verified over four passes on a downhill road: an untextured clay road on an

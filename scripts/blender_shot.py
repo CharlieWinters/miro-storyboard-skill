@@ -3,7 +3,7 @@
 
 Runs inside Blender:  Blender -b -P blender_shot.py -- --spec shot.json --out DIR
 
-Takes a shot spec (camera, primitive subjects, ground, sun, optional camera
+Takes a shot spec (camera, primitive or GLB subjects, ground, sun, optional camera
 move) and produces two artefacts per shot:
 
   <name>_block.png   one still  — the composition reference
@@ -143,7 +143,129 @@ def add_mannequin(name, loc, height, rot):
     return body
 
 
-def add_subject(spec):
+def resolve_asset(path, spec_dir, cache_dir):
+    """A local path (relative to the spec file) or an http(s) URL, as a local file.
+
+    fal hands back GLBs as CDN URLs, so a spec can name the URL straight from
+    the image-to-3D result. It is downloaded once into the output directory and
+    reused on re-render, so iterating on a camera does not re-fetch a 30 MB mesh.
+    """
+    if path.startswith(("http://", "https://")):
+        import hashlib
+        import urllib.request
+
+        os.makedirs(cache_dir, exist_ok=True)
+        base = os.path.basename(path.split("?", 1)[0]) or "asset.glb"
+        local = os.path.join(cache_dir, hashlib.sha1(path.encode()).hexdigest()[:10] + "_" + base)
+        if not os.path.isfile(local):
+            urllib.request.urlretrieve(path, local)
+        return local
+    path = os.path.expanduser(path)
+    return path if os.path.isabs(path) else os.path.join(spec_dir, path)
+
+
+def world_bounds(objs):
+    """Axis-aligned world-space bounds over every mesh vertex in objs."""
+    lo = Vector((math.inf, math.inf, math.inf))
+    hi = Vector((-math.inf, -math.inf, -math.inf))
+    for o in objs:
+        if o.type != "MESH":
+            continue
+        for v in o.data.vertices:
+            w = o.matrix_world @ v.co
+            lo = Vector(map(min, lo, w))
+            hi = Vector(map(max, hi, w))
+    return lo, hi
+
+
+def add_glb(name, spec, spec_dir, cache_dir):
+    """A real mesh (e.g. an image-to-3D GLB) standing in for a primitive.
+
+    Generated meshes arrive at arbitrary scale and with their origin wherever
+    the generator put it, so the import is normalised before it is placed:
+
+    - everything imported is parented to one empty, which is what `loc`,
+      `rot_*` and `loc_end` move, exactly like a primitive;
+    - the mesh is recentred so the empty sits at the bottom-centre of its
+      bounds. `loc` therefore means the feet, as it does for `human`, and a
+      car's `loc` is where its wheels touch the road;
+    - `height` (metres, bounds z) or `length` (metres, longest horizontal
+      side) sets a uniform scale; `scale` multiplies on top of either.
+
+    glTF is +Y-up and faces +Z; Blender's importer turns that into Z-up
+    facing -Y, i.e. towards a camera at negative y. `rot_z` turns it from
+    there. Materials are left alone: Workbench's single-colour shading draws
+    everything in clay regardless, which is the point of a greybox.
+
+    `decimate` (0-1) thins a heavy mesh; image-to-3D output is often 500k
+    faces, which renders fine but bloats every saved .blend.
+    """
+    path = resolve_asset(spec["path"], spec_dir, cache_dir)
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=path)
+    imported = [o for o in bpy.data.objects if o not in before]
+    meshes = [o for o in imported if o.type == "MESH"]
+    if not meshes:
+        raise RuntimeError(f"{path}: no mesh in GLB")
+
+    ratio = spec.get("decimate")
+    if ratio:
+        for m in meshes:
+            mod = m.modifiers.new("DECIMATE", "DECIMATE")
+            mod.ratio = float(ratio)
+
+    bpy.context.view_layer.update()
+    lo, hi = world_bounds(meshes)
+    dims = hi - lo
+    factor = 1.0
+    if spec.get("height"):
+        factor = float(spec["height"]) / max(dims.z, 1e-6)
+    elif spec.get("length"):
+        factor = float(spec["length"]) / max(dims.x, dims.y, 1e-6)
+    factor *= float(spec.get("scale") or 1.0)
+
+    root = bpy.data.objects.new(name, None)
+    bpy.context.scene.collection.objects.link(root)
+    pivot = Vector(((lo.x + hi.x) / 2, (lo.y + hi.y) / 2, lo.z))
+    for o in imported:
+        if o.parent is None:
+            # Keep world transform, then shift so the bounds' bottom-centre
+            # lands on the empty's origin.
+            o.parent = root
+            o.matrix_parent_inverse = root.matrix_world.inverted()
+            o.location -= pivot
+
+    root.scale = (factor, factor, factor)
+    root.location = spec.get("loc") or [0, 0, 0]
+    root.rotation_euler = rotation_of(spec)
+    return root
+
+
+def expand_repeats(subjects):
+    """`repeat: {count, offset}` lays out copies of a subject along a line.
+
+    A street wants a lamp post every fifteen metres down both kerbs; writing
+    twelve near-identical entries is how a spec gets a typo in post nine.
+    Copies are named NAME_1, NAME_2, …; `loc_end` is shifted with them.
+    """
+    out = []
+    for s in subjects:
+        rep = s.get("repeat")
+        if not rep:
+            out.append(s)
+            continue
+        off = Vector(rep.get("offset") or [0, 0, 0])
+        for i in range(int(rep.get("count") or 1)):
+            c = {k: v for k, v in s.items() if k != "repeat"}
+            c["name"] = f"{s.get('name') or 'REP'}_{i + 1}"
+            c["loc"] = list(Vector(s.get("loc") or [0, 0, 0]) + off * i)
+            if s.get("loc_end"):
+                c["loc_end"] = list(Vector(s["loc_end"]) + off * i)
+            out.append(c)
+    return out
+
+
+def add_subject(spec, spec_dir=".", cache_dir="."):
     kind = (spec.get("type") or "cube").lower()
     name = spec.get("name") or kind.upper()
     loc = spec.get("loc") or [0, 0, 0]
@@ -152,6 +274,9 @@ def add_subject(spec):
 
     if kind in ("human", "figure", "mannequin", "person"):
         return add_mannequin(name, loc, float(spec.get("height") or size[2] or 1.8), rot)
+
+    if kind in ("glb", "gltf", "mesh"):
+        return add_glb(name, spec, spec_dir, cache_dir)
 
     if kind == "cube" or kind == "box":
         bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
@@ -402,9 +527,11 @@ def main():
     if spec.get("ground", True):
         add_ground(float(spec.get("ground_size") or 60))
 
+    spec_dir = os.path.dirname(os.path.abspath(args.spec))
+    cache_dir = os.path.join(args.out, "_assets")
     movers = []
-    for subject in spec.get("subjects") or []:
-        obj = add_subject(subject)
+    for subject in expand_repeats(spec.get("subjects") or []):
+        obj = add_subject(subject, spec_dir, cache_dir)
         if subject.get("loc_end"):
             # Move by the delta the spec asks for, not to a raw coordinate, so
             # the object's own origin convention is irrelevant.
