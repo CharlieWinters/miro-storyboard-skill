@@ -30,6 +30,9 @@ import sys
 import bpy
 from mathutils import Vector
 
+# retarget.py sits beside this script; Blender's -P doesn't put it on the path.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
 # Aspect strings the storyboard skill uses, as width/height multipliers.
 ASPECTS = {
     "16:9": (16, 9),
@@ -241,6 +244,76 @@ def add_glb(name, spec, spec_dir, cache_dir):
     return root
 
 
+def add_rigged(name, spec, spec_dir, cache_dir, ctx):
+    """A rigged character (Meshy Rigging GLB) performing a Hunyuan Motion clip.
+
+    `path` is the rigged GLB, `anim` the Hunyuan Motion FBX; both may be URLs.
+    The motion is retargeted onto the character's skeleton and baked on frames
+    1..N of the shot (scripts/retarget.py), including the hips' travel, so a
+    walk covers ground by itself: `loc` is where the character starts, not a
+    slide target. `anim_offset` (seconds) starts partway into the clip; `in_place: true`
+    keeps the hips' bob but drops the ground travel, for a performance that
+    has to stay on its mark (a reaction in a close-up).
+
+    Both rigs face -Y at rest (glTF and Hunyuan's FBX after import), the same
+    convention as `glb`, so `rot_z` turns the whole performance, travel
+    included. `loc_end` still works on top, but a walk rarely needs it.
+    """
+    import retarget
+
+    scene = bpy.context.scene
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.gltf(filepath=resolve_asset(spec["path"], spec_dir, cache_dir))
+    imported = [o for o in bpy.data.objects if o not in before]
+    arm = next((o for o in imported if o.type == "ARMATURE"), None)
+    if arm is None:
+        raise RuntimeError(f"{spec['path']}: no armature, rig it first (Meshy Rigging)")
+    skinned = [o for o in imported if o.type == "MESH" and any(m.type == "ARMATURE" for m in o.modifiers)]
+    # Meshy ships a stray helper sphere and a default action; neither belongs in the shot.
+    for o in imported:
+        if o.type == "MESH" and o not in skinned:
+            bpy.data.objects.remove(o, do_unlink=True)
+    arm.animation_data_clear()
+    for pb in arm.pose.bones:
+        pb.matrix_basis.identity()
+
+    root = bpy.data.objects.new(name, None)
+    scene.collection.objects.link(root)
+    arm.parent = root
+
+    # The FBX importer rewrites the scene's fps and frame range to the clip's.
+    keep = (scene.render.fps, scene.frame_start, scene.frame_end)
+    before = set(bpy.data.objects)
+    bpy.ops.import_scene.fbx(filepath=resolve_asset(spec["anim"], spec_dir, cache_dir))
+    src_objs = [o for o in bpy.data.objects if o not in before]
+    src_fps = scene.render.fps
+    scene.render.fps, scene.frame_start, scene.frame_end = keep
+    source = retarget.find_source_armature(src_objs)
+    if source is None or not (source.animation_data and source.animation_data.action):
+        raise RuntimeError(f"{spec['anim']}: no animated armature in the motion file")
+    src_start = source.animation_data.action.frame_range[0]
+
+    for o in skinned:  # skinning 200k verts per sampled frame is wasted work
+        for m in o.modifiers:
+            m.show_viewport = False
+    mapped, scale, travel = retarget.bake(scene, arm, source, ctx["frames"], ctx["fps"], src_fps,
+                                  src_start, float(spec.get("anim_offset") or 0.0),
+                                          in_place=bool(spec.get("in_place")))
+    for o in skinned:
+        for m in o.modifiers:
+            m.show_viewport = True
+    for o in src_objs:
+        bpy.data.objects.remove(o, do_unlink=True)
+
+    ctx.setdefault("retargets", {})[name] = {"mapped_bones": mapped, "height_scale": round(scale, 3),
+                                                   "travel_m": [round(v, 2) for v in travel]}
+    s = float(spec.get("scale") or 1.0)
+    root.scale = (s, s, s)
+    root.location = spec.get("loc") or [0, 0, 0]
+    root.rotation_euler = rotation_of(spec)
+    return root
+
+
 def expand_repeats(subjects):
     """`repeat: {count, offset}` lays out copies of a subject along a line.
 
@@ -265,7 +338,7 @@ def expand_repeats(subjects):
     return out
 
 
-def add_subject(spec, spec_dir=".", cache_dir="."):
+def add_subject(spec, spec_dir=".", cache_dir=".", ctx=None):
     kind = (spec.get("type") or "cube").lower()
     name = spec.get("name") or kind.upper()
     loc = spec.get("loc") or [0, 0, 0]
@@ -277,6 +350,9 @@ def add_subject(spec, spec_dir=".", cache_dir="."):
 
     if kind in ("glb", "gltf", "mesh"):
         return add_glb(name, spec, spec_dir, cache_dir)
+
+    if kind in ("rigged", "character"):
+        return add_rigged(name, spec, spec_dir, cache_dir, ctx if ctx is not None else {})
 
     if kind == "cube" or kind == "box":
         bpy.ops.mesh.primitive_cube_add(size=1, location=loc)
@@ -541,9 +617,10 @@ def main():
 
     spec_dir = os.path.dirname(os.path.abspath(args.spec))
     cache_dir = os.path.join(args.out, "_assets")
+    ctx = {"frames": frames, "fps": fps}
     movers = []
     for subject in expand_repeats(spec.get("subjects") or []):
-        obj = add_subject(subject, spec_dir, cache_dir)
+        obj = add_subject(subject, spec_dir, cache_dir, ctx)
         if subject.get("loc_end"):
             # Move by the delta the spec asks for, not to a raw coordinate, so
             # the object's own origin convention is irrelevant.
@@ -559,6 +636,8 @@ def main():
     animate_subjects(scene, movers, frames)
 
     out = {"name": name}
+    if ctx.get("retargets"):
+        out["retargets"] = ctx["retargets"]
 
     # --- still: frame 1, the composition reference -----------------------
     still = os.path.join(args.out, f"{name}_block.png")

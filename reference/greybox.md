@@ -114,6 +114,55 @@ driving away. Sweeping `look_at` through the camera's own position instead
 flips the view. Extend the set **behind** the camera and close that end too,
 or the whip lands on open sky.
 
+## Performing characters: `type: "rigged"` (Meshy Rigging + Hunyuan Motion)
+
+A GLB is a statue. For a shot whose point is a performance (a walk-and-talk, a
+flinch, a head turn), rig the character and drive it with a text-described
+motion. Verified 2026-09-28 on *Night Walk* shots 2 and 4.
+
+1. **Rig** each character GLB with `fal-ai/meshy/rigging` ($0.80): pass
+   `model_url` and `height_meters`. Our 500k-face, untextured Hunyuan meshes
+   rigged first time, no decimation. You get a Mixamo-style 24-bone skeleton
+   (spine numbered top-down: Spine02 → Spine01 → Spine).
+2. **Motion** from `fal-ai/hunyuan-motion` ($0.08, ~11 s): a prompt and a
+   `duration` (0.5–12 s). It returns an FBX on an SMPL-H skeleton at 30 fps.
+   Write the performance as body language with timing: "takes two slow steps
+   and stops, then flinches, throws the right arm out, turns the head sharply
+   to the left".
+3. **Subject:**
+   ```json
+   { "name": "CHAR_B", "type": "rigged", "path": "<rigged_character.glb>",
+     "anim": "<hy_motion.fbx>", "loc": [5.1, 12.2, 0.14], "rot_z": 180,
+     "anim_offset": 0.8 }
+   ```
+   `scripts/retarget.py` (a port of the Fal app's `embed/retarget.ts`) bakes the
+   motion onto the rig: it maps bones by name, turns each character bone to point
+   the way the mannequin's does, and scales the hips' travel by height. The
+   SHOT_RESULT reports `mapped_bones` (22 is all of them) and `travel_m`.
+
+What bit, and the fixes now in the script:
+
+- **Hips travel is measured from the clip's first frame, not the bind pose.**
+  Hunyuan's bind pose has the pelvis at the origin, so a bind-relative delta
+  floated the figure a metre up and jumped it sideways.
+- **Motions wander.** A "walk" veers 6–8° and a "reaction" once walked 5 m
+  diagonally before reacting. Read `travel_m`, then either counter-rotate
+  with `rot_z` (atan of the lateral drift over the forward travel), set
+  `in_place: true` (keeps the bob, drops the ground travel), or regenerate
+  the clip with "stays in place" in the prompt. Regenerating gave the best
+  reaction.
+- **Two walkers drift apart and out of step.** Each clip has its own pace:
+  offset the slower walker's start by the difference in `travel_m`.
+- **`anim_offset`** staggers two reactions so one lands a beat after the
+  other. Past the clip's end, the last pose holds.
+- Both rigs face -Y at rest, like `glb`: `rot_z: 180` turns a walk toward
+  +Y, travel included.
+- A long coat skins to the legs as a skirt. Fine in grey; don't promise cloth.
+  There are no finger or face bones: performance means head, shoulders, arms, gait.
+- Frame a reaction wider than feels natural, and light the faces
+  (`extra={"sun": …}` with the sun behind camera). The first S4 at 50 mm hid
+  the car it was reacting to, and its walls rendered black.
+
 `repeat: {"count": 8, "offset": [0, 15, 0]}` on any subject lays out copies
 along a line (`NAME_1`, `NAME_2`, …). Use it for lamp posts, bollards and
 parked cars.
