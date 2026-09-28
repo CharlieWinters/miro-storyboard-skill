@@ -492,13 +492,25 @@ def animate_camera(scene, cam, look_at, spec, frames):
         ease(holder)
 
 
+def linear(holder):
+    """Constant speed: a car driving through frame doesn't pull away from a stop."""
+    for fc in action_fcurves(holder):
+        for kp in fc.keyframe_points:
+            kp.interpolation = "LINEAR"
+
+
 def animate_subjects(scene, movers, frames):
-    """A subject with `loc_end` slides from loc to loc_end over the clip."""
-    for obj, end_loc in movers:
+    """A subject with `loc_end` slides from loc to loc_end over the clip.
+
+    Eased by default, like a person setting off and stopping; `"motion":
+    "linear"` keeps a constant speed, which is what a passing vehicle needs
+    when only the camera is meant to whip.
+    """
+    for obj, end_loc, motion in movers:
         obj.keyframe_insert("location", frame=1)
         obj.location = Vector(end_loc)
         obj.keyframe_insert("location", frame=frames)
-        ease(obj)
+        (linear if motion == "linear" else ease)(obj)
 
 
 def main():
@@ -537,7 +549,7 @@ def main():
             # the object's own origin convention is irrelevant.
             start = Vector(subject.get("loc") or [0, 0, 0])
             delta = Vector(subject["loc_end"]) - start
-            movers.append((obj, obj.location + delta))
+            movers.append((obj, obj.location + delta, subject.get("motion")))
 
     look_at = setup_look_at(spec.get("camera", {}).get("look_at") or [0, 0, 1.2])
     cam = setup_camera(spec.get("camera") or {}, look_at)

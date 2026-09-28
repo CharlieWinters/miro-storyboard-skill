@@ -59,7 +59,7 @@ to skip the clip.
 - `loc` is a primitive's **centre** but a figure's (and a GLB's) **feet**
 - `rot_x` / `rot_y` / `rot_z` in degrees — reach for pitch before faking an
   angle with extra geometry
-- `loc_end` moves a subject over the clip; `camera_end` moves the camera
+- `loc_end` moves a subject over the clip (eased; `"motion": "linear"` for constant speed); `camera_end` moves the camera
 - omit `camera_end` for a locked-off shot
 
 ## Real meshes instead of clay: `type: "glb"`
@@ -103,6 +103,16 @@ uploading it.
 The Fal app has no multi-view card format: an image-to-3D recipe card saves
 `referenceField: null` and the director assigns each view to its slot in the
 panel. Wire the sheet and the view crops to the card so they're at hand.
+
+**A vehicle passing with a whip-pan** (Shot 3 of *Night Walk*): give the car
+`"motion": "linear"` so it holds a constant speed (subjects ease by default,
+which reads as pulling away from a stop), keep the camera fixed and animate
+only `look_at`, sweeping it **along the car's lane** from far ahead to far
+behind, with the car passing the camera at mid-clip. The camera's default
+ease then holds on the approach, whips as the car passes and settles on it
+driving away. Sweeping `look_at` through the camera's own position instead
+flips the view. Extend the set **behind** the camera and close that end too,
+or the whip lands on open sky.
 
 `repeat: {"count": 8, "offset": [0, 15, 0]}` on any subject lays out copies
 along a line (`NAME_1`, `NAME_2`, …). Use it for lamp posts, bollards and

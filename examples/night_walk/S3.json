@@ -1,5 +1,5 @@
 {
- "name": "S1",
+ "name": "S3",
  "aspect": "16:9",
  "width": 1280,
  "fps": 24,
@@ -10,16 +10,16 @@
  "sky_color": "#d9dde3",
  "camera": {
   "loc": [
-   0.6,
-   -6,
-   2.4
+   3.1,
+   8.0,
+   1.55
   ],
   "look_at": [
-   0.8,
+   1.0,
    45,
-   2.2
+   1.3
   ],
-  "lens": 24
+  "lens": 28
  },
  "sun": {
   "elevation_deg": 35,
@@ -1087,16 +1087,16 @@
    "type": "glb",
    "path": "https://v3b.fal.media/files/b/0aac3b69/uRjWP6Djf89TXFlYVqomX_model.glb",
    "loc": [
-    4.3,
-    24,
+    4.0,
+    11.5,
     0.14
    ],
-   "rot_z": 0,
+   "rot_z": 180,
    "decimate": 0.25,
    "height": 1.68,
    "loc_end": [
-    4.3,
-    20.5,
+    4.0,
+    13.5,
     0.14
    ]
   },
@@ -1105,31 +1105,50 @@
    "type": "glb",
    "path": "https://v3b.fal.media/files/b/0aac3b6a/XDRK0b74hC3_nfEg697Oj_model.glb",
    "loc": [
-    5.1,
-    24.4,
+    4.8,
+    11.8,
     0.14
    ],
-   "rot_z": 0,
+   "rot_z": 180,
    "decimate": 0.25,
    "height": 1.86,
    "loc_end": [
-    5.1,
-    20.9,
+    4.8,
+    13.8,
     0.14
    ]
+  },
+  {
+   "name": "PROP_Vehicle",
+   "type": "glb",
+   "path": "https://v3b.fal.media/files/b/0aac3b6a/Zow75zvukI7bWkW4k2KwU_model.glb",
+   "loc": [
+    -1.6,
+    43,
+    0
+   ],
+   "rot_z": 0,
+   "decimate": 0.25,
+   "length": 4.1,
+   "loc_end": [
+    -1.6,
+    -27,
+    0
+   ],
+   "motion": "linear"
   }
  ],
  "camera_end": {
   "loc": [
-   0.6,
-   2,
-   2.1
+   3.1,
+   8.0,
+   1.55
   ],
   "look_at": [
-   0.8,
-   47,
-   2.0
+   -1.6,
+   -30,
+   1.0
   ],
-  "lens": 24
+  "lens": 28
  }
 }
