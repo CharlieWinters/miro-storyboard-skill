@@ -120,6 +120,16 @@ name it and negate it explicitly: *"there is no speed trail and nothing is
 glowing; they are only just pushing off."* A generic "match the style" will not
 suppress it.
 
+**A set plate imposes its own geometry, even when told not to.** On *Night
+Walk*, a narrow-lane `SET_Street` plate, conditioned alongside a greybox of a
+7 m two-lane road, squeezed every key frame back into a lane and re-centred the
+vanishing point. "Only a reference for materials, not composition" did not stop
+it. Once a greybox exists, condition on the greybox plus an **earlier approved
+key frame** for look (S1_KEY for S2), not the set plate, and state the layout's
+dimensions in the prompt ("a wide two-lane road, about 7 m across"). Also keep
+the plate off the video cards for those shots. Make the set plate match the
+blocked geometry in the first place if it's going to be reused.
+
 **Chain shots that need character consistency.** Once shot 2's `_KEY` exists,
 condition shots 4 and 5 on it. The protagonist then survives the cut at no
 extra cost, which text prompting alone will not give you.
