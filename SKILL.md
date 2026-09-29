@@ -16,7 +16,8 @@ and generates from it. **Claude never generates video**: video is the
 expensive, taste-driven call, and it stays with the person.
 
 **No browser automation.** This runs on the Miro MCP, the fal MCP and, only
-for greybox mode, a local Blender.
+for greybox mode, the **`greybox-shot`** skill (headless Blender), which
+renders the grey `_BLOCK` stills and `_MOVE` clips.
 
 Read `reference/board-contract.md` before your first board. It records what
 the app actually reads off a board, with citations. The other references are
@@ -27,7 +28,7 @@ read when a step points to them:
 | `reference/board-contract.md` | always, before building |
 | `reference/models.md` | Step 3: choosing, limits, pricing |
 | `reference/image-generation.md` | Step 5: references, conditioning, camera boards |
-| `reference/greybox.md` | only in greybox mode |
+| `reference/greybox.md` | only in greybox mode: what to hand `greybox-shot`, and how its renders go on the board |
 | `reference/motion.md` | only for a greybox clip published as an mp4 |
 
 ## The shape of the board
@@ -63,9 +64,11 @@ all":
    `reference/models.md`: one model across every cut). The default is
    `minimax/h3/reference-to-video`: it takes a photoreal actor, 9 reference
    images and 3 motion clips.
-6. **Pass.** Images only (default: a look and a read in minutes) or a Blender
-   greybox too (≈10 min more, literal camera geometry; worth it for interiors
-   and object-heavy sets, not open landscape). See `reference/greybox.md`.
+6. **Pass.** Images only (default: a look and a read in minutes) or a
+   greybox too via the `greybox-shot` skill (literal camera geometry, and with
+   rigged characters, real body performances; worth it for interiors, streets,
+   object-heavy sets and performance beats, not open landscape; ≈10 min, or
+   more with 3D characters). See `reference/greybox.md`.
 7. **Budget ceiling** for the first pass. Default: confirm anything over $1.
 
 Also say, briefly, how you read their board: "I see a STYLE frame and 5 scene
@@ -187,14 +190,14 @@ In cut order, per shot:
    conditioned on. That becomes its image card in Step 6. A redo replaces
    the recipe; don't stage the rejected one.
 
-**No `FAL_KEY` is needed for any of this**, including conditioning on board
-images: the fal MCP carries its own credentials, and `upload_file(url=…)`
-re-hosts a board image without a key. The key is only for uploading a *local*
-file (a greybox render, an mp4), see `reference/greybox.md` and
-`reference/motion.md`.
+**No `FAL_KEY` is needed for any of this**, including local files: the fal MCP
+carries its own credentials. `upload_file(url=…)` re-hosts a board image, and
+`upload_file(prepare_upload=true, file_name, file_size)` returns a signed URL
+to `curl -X PUT` a local greybox render or mp4 to (verified 2026-09-28).
 
-In greybox mode, render and place the `_BLOCK` stills first and condition on
-them (`reference/greybox.md`).
+In greybox mode, render the shots with the `greybox-shot` skill first, place
+the `_BLOCK` stills, and condition each key frame on its `_BLOCK`
+(`reference/greybox.md`).
 
 ## Step 6 — Build the Shots row: image cards, key frames, prompts, video cards
 

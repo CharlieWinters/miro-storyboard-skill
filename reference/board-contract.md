@@ -237,26 +237,9 @@ Learned the hard way while building; each one cost a wrong result first.
   `canvas_search`/`canvas_read_as_svg` when it goes, and re-verify ordering
   then.
 
-## Blender notes (this machine, Blender 5.2 LTS)
+## Blender notes
 
-- Binary: `/Applications/Blender.app/Contents/MacOS/Blender`. The MCP bridge at
-  `~/platform-architect2026/blender-mcp-bridge/bridge.py` needs Blender open
-  with its addon server started; `blender_shot.py` deliberately does not use
-  it, so nothing has to be running.
-- **This build has no FFmpeg output** — `image_settings.file_format` offers
-  only still formats. Render a PNG sequence and encode with system ffmpeg.
-- **`scale` on a `size=1` primitive is its dimension in metres**, not a
-  half-extent. Halving it silently builds the whole set at half size.
-- **`action.fcurves` is gone** in 4.4+; F-curves live at
-  `action.layers[].strips[].channelbags[].fcurves`.
-- **Workbench ignores scene lamps** unless `use_scene_lights_render = True`.
-  Without it a `sun` block in a spec is decoration.
-- `object.join()` leaves the origin at the active object's, so a joined
-  mannequin's origin is mid-torso. `blender_shot.py` re-origins it to the feet,
-  which is why `loc` means the same thing for a figure as for a box.
-- **`loc` is a primitive's centre but a figure's feet.** Deliberate — you think
-  about where a person stands and where an object sits — but it is an asymmetry
-  worth remembering.
+Moved to the `greybox-shot` skill (`reference/blocking.md`, "Blender notes").
 
 ## Settings cards and connectors (the "generation node" pattern)
 
